@@ -1,0 +1,9 @@
+# Local VM state (written by provision/discover; never commit)
+desktop_vm.json
+
+# Skill-local venv (auto-created when system pip is PEP 668–locked)
+.venv/
+
+# Python bytecode
+__pycache__/
+*.py[cod]

@@ -1,0 +1,10 @@
+{
+  "vm_ip": "",
+  "instance_id": "",
+  "port": 5000,
+  "region": "",
+  "image_id": "",
+  "created_at": "",
+  "provider_name": "aliyun",
+  "vm_requirements_installed_at": ""
+}
