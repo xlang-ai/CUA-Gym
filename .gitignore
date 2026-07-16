@@ -22,6 +22,7 @@ env_config.json
 
 # Internal run artifacts (logs, intermediate results)
 filter/results/
+draft/
 *.log
 *.jsonl
 

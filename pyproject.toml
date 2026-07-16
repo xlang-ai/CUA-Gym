@@ -33,6 +33,11 @@ dependencies = [
     "Django>=5.0",
     # Data utilities
     "PyYAML>=6.0",
+    # WebEnv gym environment
+    "gymnasium>=0.29.0",
+    "numpy>=1.24.0",
+    # Agent / env config
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -46,6 +51,9 @@ dev = [
 Homepage = "https://github.com/xlang-ai/CUA-Gym"
 Paper    = "https://arxiv.org/abs/XXXX.XXXXX"
 Dataset  = "https://huggingface.co/datasets/xlangai/CUA-Gym"
+
+[tool.setuptools]
+packages = ["web_env", "web_env.tasks", "web_env.agents"]
 
 [tool.ruff]
 line-length = 100
