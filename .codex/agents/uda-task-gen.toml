@@ -1,0 +1,12 @@
+name = "uda-task-gen"
+description = "Deprecated guard for old CUA-Gym task-generation JSON. Redirects to UDA-Gym query generation and materialization."
+model_reasoning_effort = "medium"
+developer_instructions = """
+You are the deprecated task-gen guard for CUA-Gym.
+
+First read .codex/agents/prompts/task-gen.md in the current task workspace.
+Then follow it exactly.
+
+Do not generate old CUA-Gym task-generation JSON, config.json, initial_setup.py,
+golden_patch.py, or reward.py.
+"""

@@ -34,11 +34,16 @@ CUA-Gym is a scalable pipeline for synthesizing verifiable RLVR training data fo
 
 Training computer-use agents with reinforcement learning requires a consistent triple of **(task instruction, executable environment, verifiable reward)**. Hand-authoring even one such triple takes hours; CUA-Gym automates this at scale.
 
-**Pipeline.** Three coordinated agents run per task:
+**Current pipeline.** CUA-Gym now acts as a materializer for UDA-Gym generated
+queries. Three coordinated agents run per task:
 
-- **Generator** (`setup-gen`): constructs the initial and golden environment states (`initial_setup.py`, `golden_patch.py`)
-- **Discriminator** (`reward-gen`): writes `reward.py` from the task description alone, without access to Generator's code (information barrier)
-- **Orchestrator**: drives the two through iterative rounds until `reward(golden)=1.0` and `reward(initial)=0.0` both hold under execution
+- **Generator** (`setup-gen`): builds the native UDA-Gym bundle setup side:
+  `instruction.md`, `meta.json`, `exec/`, `hidden/`, and `setup.sh`
+- **Discriminator** (`reward-gen`): builds `gt/` and `check.sh`, then reviews
+  the bundle against the original UDA `query.md`, `surface.yaml`, and
+  `check.yaml`
+- **Orchestrator**: drives the two through iterative rounds until the bundle
+  review passes and then exports `output/final/<task_id>/`
 
 **Filtering.** Verified tuples pass through an LLM majority-vote filter (`filter/majority_vote_filter.py`) that rejects tasks where the reward is fragile, ambiguous, or inconsistent. Teacher rollouts provide a second filter stage.
 
@@ -74,23 +79,55 @@ pip install -e ".[dev]"
 cp .env.example .env  # fill in OPENAI_API_KEY and ALIYUN_* credentials
 ```
 
-**Generate tasks for a domain**
+**Materialize UDA-Gym generated queries directly**
 
-Invoke the `task-gen` agent from the CUA-Gym directory in Claude Code:
-
-```
-Generate 50 LibreOffice Calc tasks covering formatting and formula operations.
-```
-
-Output: `output/task_generation/<topic>.json`
-
-**Run the adversarial co-generation loop**
+CUA-Gym can also read UDA-Gym `gen/` outputs as task input and materialize them
+into native UDA-Gym task bundles. The source UDA query package remains
+read-only; CUA-Gym writes completed bundles under `output/final/<task_id>/`.
+See [`docs/UDA_GYM_PIPELINE_HANDOFF.md`](docs/UDA_GYM_PIPELINE_HANDOFF.md) for
+the role boundaries, workspace contract, publication gates, and office-machine
+setup.
 
 ```bash
-python scripts/batch_orchestrator.py output/task_generation/calc_formatting.json
+export UDA_GYM_ROOT=/path/to/UDA-Gym
+export NANOROLLOUT_ROOT=/path/to/NanoRollout
+
+# Run every valid query package under gen/
+python scripts/batch_orchestrator.py "$UDA_GYM_ROOT/gen"
+
+# Or run every valid UDA query listed in queries.jsonl
+python scripts/batch_orchestrator.py "$UDA_GYM_ROOT/gen/queries.jsonl"
+
+# Or run one generated query package directly
+python scripts/batch_orchestrator.py "$UDA_GYM_ROOT/gen/20260625_849781"
 ```
 
-Verified tuples land in `output/final/<task_id>/`.
+`NANOROLLOUT_ROOT` is optional when NanoRollout is checked out at
+`../NanoRollout` or `../UDA-Gym/NanoRollout`; both materializers discover those
+layouts automatically.
+
+The loader accepts only UDA packages that contain `query.md`, `check.yaml`, and
+`surface.yaml`; older non-surface packages are skipped until regenerated or
+re-criticized.
+
+For UDA inputs, the final artifact is an open-box UDA-Gym bundle:
+
+```text
+output/final/<task_id>/
+  meta.json
+  instruction.md
+  exec/
+  hidden/
+  setup.sh
+  gt/
+  check.sh
+```
+
+Mock website tasks use the public hybrid `cua-gym-*.xlang.ai` hosts: hidden
+setup/check code uses `CUA_GYM_ADMIN_TOKEN`, setup opens Chrome to the returned
+one-time `launch_url`, and verifier code reads server-side state through
+admin-token `/go?sid=<sid>`. Seed state, sid files, admin responses, and answer
+keys must not be placed in agent-visible `exec/` or instructions.
 
 **Run the majority-vote filter**
 
@@ -123,7 +160,7 @@ huggingface-cli download xlangai/CUA-Gym --repo-type dataset --local-dir data/
 
 CUA-Gym-Hub is built by a multi-agent environment synthesis pipeline. Given a target application seed, the system drafts the product specification, implements the mock web app, exercises the UI with Playwright, and iterates until the live interface and API protocol match the specification.
 
-Two design choices make each mock usable as an RL training environment: **(1) state injection** — a task ships its own JSON initial state alongside its `reward.py`, so a single mock can host arbitrarily many distinct task worlds with no code change; and **(2) session isolation** — every URL carries a session id, so parallel RL workers training on the same mock never see one another's mutations. See [hub/README.md](hub/README.md#why-this-works) for the full design rationale and HTTP state API.
+Two design choices make each mock usable as an RL training environment: **(1) state injection** — a task seeds server-side state from hidden setup code, so a single mock can host arbitrarily many distinct task worlds with no code change; and **(2) session isolation** — every task gets an isolated session, so parallel RL workers training on the same mock never see one another's mutations. See [hub/README.md](hub/README.md#why-this-works) for the full design rationale and HTTP state API.
 
 **What CUA-Gym-Hub provides:**
 
@@ -151,77 +188,23 @@ Every mock supports the same session-scoped state API (`/go`, `/post`, `/state`,
 
 ## CUA-Gym Datasets
 
-CUA-Gym releases executable RLVR task bundles for computer-use agents. Each row in the Hugging Face [Dataset Viewer](https://huggingface.co/datasets/xlangai/CUA-Gym/viewer/tasks/train) is a task-level index entry: it contains the natural-language instruction, environment metadata, setup references, and reward-function reference needed to reconstruct the original task bundle.
-
-> **Important Notice.** Some web task setup and reward files require CUA-Gym-Hub endpoints. The public dataset stores these endpoints as placeholders such as `__CUA_GYM_GMAIL_URL__`, not as hard-coded hosted URLs. For reliable use, deploy the corresponding CUA-Gym-Hub apps yourself, set the `CUA_GYM_*_URL` variables in `url_variables.json`, and materialize the task files before running setup or reward code. The release-hosted `xlang.ai` endpoints are for reference and smoke tests, not for large-scale downstream experiments.
-
-👉 [CUA-Gym Hugging Face Dataset](https://huggingface.co/datasets/xlangai/CUA-Gym)
-
-Install the standard Hugging Face dataset tooling:
-
-```bash
-pip install -U datasets huggingface_hub
-```
-
-Load the task index directly in Python:
-
-```python
-from datasets import load_dataset
-
-tasks = load_dataset("xlangai/CUA-Gym", "tasks", split="train")
-example = tasks[0]
-
-print(example["instruction"])
-print(example["app_type"], example["platform"], example["setup_kind"])
-```
-
-Or download the full dataset repository locally:
-
-```bash
-huggingface-cli download xlangai/CUA-Gym \
-  --repo-type dataset \
-  --local-dir ./CUA-Gym-data
-```
-
-If you plan to execute web tasks, extract the raw bundles and replace endpoint placeholders with your own deployment URLs:
-
-```bash
-mkdir -p ./cua_gym_tasks
-tar --zstd -xf ./CUA-Gym-data/artifacts/cua_gym_tasks_v1.tar.zst -C ./cua_gym_tasks
-
-cat > .env.cua-gym <<'EOF'
-CUA_GYM_GMAIL_URL=https://your-gmail-mock.example.com
-CUA_GYM_SLACK_URL=https://your-slack-mock.example.com
-CUA_GYM_NOTION_URL=https://your-notion-mock.example.com
-EOF
-
-python scripts/materialize_dataset_urls.py ./cua_gym_tasks \
-  --manifest ./CUA-Gym-data/url_variables.json \
-  --env-file .env.cua-gym
-```
-
-The dataset is organized around one viewer-friendly table plus executable artifacts:
-
-```
-data/
-  tasks.parquet
-artifacts/
-  cua_gym_tasks_v1.tar.zst
-url_variables.json
-scripts/
-  materialize_dataset_urls.py
-```
-
-Each task bundle contains:
+CUA-Gym now emits native UDA-Gym task bundles. Each final bundle contains:
 
 ```
 <task_id>/
-  task.json
-  reward.py
-  initial_setup.py | initial_setup.sh | initial_setup.xlsx | initial_setup.docx | initial_setup.pptx
+  meta.json
+  instruction.md
+  exec/
+  hidden/
+  setup.sh
+  gt/
+  check.sh
 ```
 
-To execute a task, extract the artifact archive, read `<task_id>/task.json`, run the listed setup steps in the target environment, let the agent interact with the environment, and finally run `<task_id>/reward.py` to compute the programmatic score.
+To execute a task, stage `exec/` into `/tmp_workspace`, stage `hidden/` into
+`/tmp_workspace/.uda_hidden`, run `setup.sh`, remove hidden setup assets, let the
+agent follow `instruction.md`, stage `gt/`, and run `check.sh` to compute the
+programmatic JSON score.
 
 ## Results
 
