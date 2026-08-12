@@ -137,6 +137,38 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
         if src.is_file():
             shutil.copy2(src, bundle / "hidden" / name)
 
+    # Some query packages keep the browser payload only in the evaluator's
+    # pristine copy.  If an asset lock declares the expected files, hydrate
+    # the agent-visible context from that canonical copy instead of silently
+    # producing a bundle that fails before gameplay is judged.  This remains
+    # generic: non-browser tasks simply have no ``asset_lock``/
+    # ``pristine_game`` topology and take the normal context-copy path.
+    asset_lock = bundle / "hidden" / "asset_lock.json"
+    pristine = bundle / "hidden" / "pristine_game"
+    context_game = bundle / "exec" / "context" / "game"
+    if asset_lock.is_file() and pristine.is_dir():
+        locked = json.loads(asset_lock.read_text())
+        expected = {
+            str(item.get("path"))
+            for item in locked.get("assets", [])
+            if isinstance(item, dict) and item.get("path")
+        }
+        if not expected:
+            expected = {
+                str(path)
+                for item in locked.get("assets", [])
+                if isinstance(item, dict)
+                for path in (item.get("source_files") or [])
+            }
+        if expected:
+            context_game.mkdir(parents=True, exist_ok=True)
+            for relative in sorted(expected):
+                canonical = pristine / relative
+                target = context_game / relative
+                if canonical.is_file():
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(canonical, target)
+
     _write_executable(bundle / "setup.sh", r"""
         #!/usr/bin/env bash
         set -euo pipefail
