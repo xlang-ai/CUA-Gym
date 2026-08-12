@@ -50,6 +50,7 @@ def run(
     add_dirs: Iterable[Path] = (),
     log_path: Path | None = None,
     timeout_seconds: int | None = None,
+    kimi_code_home: Path | None = None,
 ) -> int:
     argv = command(
         workspace=workspace,
@@ -61,6 +62,11 @@ def run(
     )
     env = os.environ.copy()
     env.setdefault("KIMI_OUTPUT_FORMAT", "stream-json")
+    if kimi_code_home:
+        # Kimi Code resolves config.toml from KIMI_CODE_HOME.  Keeping this
+        # optional lets a materialization use an isolated provider endpoint
+        # without mutating the user's global CLI configuration.
+        env["KIMI_CODE_HOME"] = str(kimi_code_home)
     output = log_path.open("w", encoding="utf-8") if log_path else None
     process = subprocess.Popen(
         argv,
@@ -96,6 +102,7 @@ def main() -> int:
     parser.add_argument("--add-dir", type=Path, action="append", default=[])
     parser.add_argument("--log", type=Path, default=None)
     parser.add_argument("--timeout-seconds", type=int, default=None)
+    parser.add_argument("--kimi-code-home", type=Path, default=None)
     args = parser.parse_args()
     return run(
         workspace=args.workspace,
@@ -106,6 +113,7 @@ def main() -> int:
         add_dirs=args.add_dir,
         log_path=args.log,
         timeout_seconds=args.timeout_seconds,
+        kimi_code_home=args.kimi_code_home,
     )
 
 

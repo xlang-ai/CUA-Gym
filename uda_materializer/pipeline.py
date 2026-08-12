@@ -103,6 +103,7 @@ def run_one(
     force: bool,
     dry_run: bool,
     kimi_timeout_seconds: int | None = None,
+    kimi_code_home: Path | None = None,
 ) -> dict[str, Any]:
     workspace, payload = prepare(package, output_root, force=force)
     result: dict[str, Any] = {"task_id": package.name, "workspace": str(workspace)}
@@ -119,6 +120,7 @@ def run_one(
         add_dirs=(package.parent,),
         log_path=log_path,
         timeout_seconds=kimi_timeout_seconds,
+        kimi_code_home=kimi_code_home,
     )
     result["kimi_exit_code"] = rc
     result["bundle_complete"] = bundle_complete(workspace / "bundle")

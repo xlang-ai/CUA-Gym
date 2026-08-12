@@ -21,6 +21,12 @@ def main() -> int:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--kimi-timeout-seconds", type=int, default=900)
+    parser.add_argument(
+        "--kimi-code-home",
+        type=Path,
+        default=None,
+        help="isolated Kimi Code home containing config.toml (or use UDA_KIMI_CODE_HOME)",
+    )
     args = parser.parse_args()
     packages = discover(args.input)
     if args.task_id:
@@ -36,6 +42,7 @@ def main() -> int:
             force=args.force,
             dry_run=args.dry_run,
             kimi_timeout_seconds=args.kimi_timeout_seconds,
+            kimi_code_home=args.kimi_code_home,
         )
         for package in packages
     ]
