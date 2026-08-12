@@ -194,11 +194,16 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
             python3 -m pip install --disable-pip-version-check --user --quiet -r "$BUNDLE_ROOT/runtime_requirements.txt"
           fi
         fi
+        PYTHON_BIN="python3"
+        if [[ -x "$WORKSPACE/.uda_hidden/venv/bin/python" ]]; then
+          PYTHON_BIN="$WORKSPACE/.uda_hidden/venv/bin/python"
+        fi
+        printf '%s\n' "$PYTHON_BIN" >"$WORKSPACE/.uda_hidden/python_bin"
         cp -a "$BUNDLE_ROOT/exec/." "$WORKSPACE/"
         cp -a "$BUNDLE_ROOT/hidden/." "$WORKSPACE/.uda_hidden/"
         if [[ -f "$WORKSPACE/.uda_hidden/harness_server.py" ]]; then
           mkdir -p "$WORKSPACE/.uda_hidden/runtime"
-          python3 "$WORKSPACE/.uda_hidden/harness_server.py" \
+          "$PYTHON_BIN" "$WORKSPACE/.uda_hidden/harness_server.py" \
             --contract "$WORKSPACE/.uda_hidden/play_contract.json" \
             --root "$WORKSPACE/context/game" \
             --port "${UDA_GAME_PORT:-8317}" \
@@ -243,13 +248,17 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
         #!/usr/bin/env bash
         set -euo pipefail
         WORKSPACE="${UDA_WORKSPACE:-/tmp_workspace}"
+        PYTHON_BIN="python3"
+        if [[ -s "$WORKSPACE/.uda_hidden/python_bin" ]]; then
+          PYTHON_BIN="$(cat "$WORKSPACE/.uda_hidden/python_bin")"
+        fi
         if [[ -x "$WORKSPACE/.uda_hidden/verifier.py" || -f "$WORKSPACE/.uda_hidden/verifier.py" ]]; then
           TMP="$(mktemp -d)"
           trap 'rm -rf "$TMP"' EXIT
           cp -a "$WORKSPACE/.uda_hidden/." "$TMP/hidden/"
           cp "$WORKSPACE/.uda_hidden/asset_lock.json" "$TMP/asset_lock.json"
           set +e
-          python3 "$TMP/hidden/verifier.py" \
+          "$PYTHON_BIN" "$TMP/hidden/verifier.py" \
             --package "$TMP" \
             --log "$WORKSPACE/.uda_hidden/runtime/move_log.jsonl" \
             --context-dir "$WORKSPACE/context/game" \
@@ -257,7 +266,7 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
           verifier_rc=$?
           set -e
           cat "$TMP/verifier.out"
-          python3 - "$TMP/verifier.out" "$verifier_rc" <<'PY'
+          "$PYTHON_BIN" - "$TMP/verifier.out" "$verifier_rc" <<'PY'
         import json
         import sys
         text = open(sys.argv[1], encoding="utf-8").read()
@@ -268,7 +277,7 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
                           "verdict": verdict, "verifier_exit_code": rc}))
         PY
         else
-          python3 - <<'PY'
+          "$PYTHON_BIN" - <<'PY'
         import json
         print(json.dumps({"overall_score": 0.0, "subscores": {}, "errors": ["no generic verifier supplied"]}))
         PY
