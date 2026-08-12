@@ -154,6 +154,21 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
             --log "$WORKSPACE/.uda_hidden/runtime/move_log.jsonl" \
             >"$WORKSPACE/.uda_hidden/runtime/harness.log" 2>&1 &
           echo $! >"$WORKSPACE/.uda_hidden/runtime/harness.pid"
+          python3 - "${UDA_GAME_PORT:-8317}" <<'PY'
+        import socket
+        import sys
+        import time
+        port = int(sys.argv[1])
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                    break
+            except OSError:
+                time.sleep(0.1)
+        else:
+            raise SystemExit("UDA harness did not become ready")
+        PY
         fi
     """)
 
@@ -165,6 +180,7 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
           TMP="$(mktemp -d)"
           trap 'rm -rf "$TMP"' EXIT
           cp -a "$WORKSPACE/.uda_hidden/." "$TMP/hidden/"
+          cp "$WORKSPACE/.uda_hidden/asset_lock.json" "$TMP/asset_lock.json"
           python3 "$TMP/hidden/verifier.py" \
             --package "$TMP" \
             --log "$WORKSPACE/.uda_hidden/runtime/move_log.jsonl" \
