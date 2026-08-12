@@ -110,6 +110,14 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
     runtime = _yaml_mapping(source / "runtime.yaml")
     runtime_data = runtime.get("runtime") if isinstance(runtime.get("runtime"), dict) else runtime
     profile = runtime_data.get("profile", "general-root") if isinstance(runtime_data, dict) else "general-root"
+    required_software = runtime_data.get("required_software", []) if isinstance(runtime_data, dict) else []
+    python_requirements = []
+    for item in required_software if isinstance(required_software, list) else []:
+        label = str(item).lower()
+        if "python-chess" in label:
+            python_requirements.append("chess")
+        elif "playwright" in label:
+            python_requirements.append("playwright")
 
     (bundle / "exec").mkdir(parents=True, exist_ok=True)
     (bundle / "hidden").mkdir(parents=True, exist_ok=True)
@@ -123,6 +131,9 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
         "runtime": {"type": "ec2", "profile": profile},
         "source_query_sha256": payload["query_sha256"],
     }, indent=2) + "\n")
+    (bundle / "runtime_requirements.txt").write_text(
+        "\n".join(sorted(set(python_requirements))) + ("\n" if python_requirements else "")
+    )
 
     _copy_contents(source / "context", bundle / "exec" / "context")
     _copy_contents(source / "hidden", bundle / "hidden")
@@ -175,6 +186,14 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
         BUNDLE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
         WORKSPACE="${UDA_WORKSPACE:-/tmp_workspace}"
         mkdir -p "$WORKSPACE/results" "$WORKSPACE/context" "$WORKSPACE/.uda_hidden"
+        if [[ -s "$BUNDLE_ROOT/runtime_requirements.txt" ]]; then
+          python3 -m venv "$WORKSPACE/.uda_hidden/venv" 2>/dev/null || true
+          if [[ -x "$WORKSPACE/.uda_hidden/venv/bin/python" ]]; then
+            "$WORKSPACE/.uda_hidden/venv/bin/python" -m pip install --disable-pip-version-check --quiet -r "$BUNDLE_ROOT/runtime_requirements.txt"
+          else
+            python3 -m pip install --disable-pip-version-check --user --quiet -r "$BUNDLE_ROOT/runtime_requirements.txt"
+          fi
+        fi
         cp -a "$BUNDLE_ROOT/exec/." "$WORKSPACE/"
         cp -a "$BUNDLE_ROOT/hidden/." "$WORKSPACE/.uda_hidden/"
         if [[ -f "$WORKSPACE/.uda_hidden/harness_server.py" ]]; then
