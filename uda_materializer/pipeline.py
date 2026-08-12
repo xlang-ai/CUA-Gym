@@ -78,13 +78,23 @@ Task id: {payload['task_id']}
 Runtime backend: AWS EC2 worker (not SimCloud)
 Teacher: Kimi hybrid harness using moonshotai/Kimi-K3
 
-Follow the unified uda-materializer skill. Read the full source package first.
-Do not create task/game-specific materializer code or modify the source copy.
-Run setup-gen and reward-gen reasoning serially within this one materialization,
-then run the real AWS teacher controller if UDA_AWS_GYM_URL is configured.
-Persist all runtime evidence under rollout/. Do not claim SANITY PASS without
-real setup, teacher trajectory, numeric score, alignment review, and feedback.
-If AWS is unavailable, record the exact blocker and leave SANITY pending.
+Follow the unified uda-materializer skill and do not create task/game-specific
+materializer code. Read the source manifests and query, then immediately use
+Bash/Write to produce the native bundle contract:
+  bundle/meta.json, instruction.md, setup.sh, check.sh,
+  bundle/exec/, bundle/hidden/, bundle/gt/, REVIEW.md, and SANITY.md.
+Keep source/uda_package immutable. Map every check.yaml criterion into check.sh;
+do not replace a replay/state verifier with a weaker heuristic. Copy visible
+assets to exec and setup/reward-only assets to hidden/gt according to the
+skill. Run bash -n and a static contract audit before returning.
+
+There is no need to search the parent repository or invent infrastructure. Do
+not spend additional turns rereading already-read files: write the files now,
+then inspect only the generated bundle. If UDA_AWS_GYM_URL is configured, run
+the real AWS teacher controller and persist all evidence under rollout/. If it
+is not configured, write an explicit pending runtime record and leave SANITY
+pending; never claim rollout success from static checks. Do not modify the
+source copy or create a per-game materializer.
 """
 
 
