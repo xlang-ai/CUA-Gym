@@ -16,6 +16,7 @@ import json
 import os
 import shlex
 import socketserver
+import tarfile
 import time
 import urllib.error
 import urllib.request
@@ -58,20 +59,37 @@ class AwsCompatBridge:
         remote = f"{self.remote_root}/{task}"
         if task in self.deployed:
             return remote
-        for path in sorted(bundle.rglob("*")):
-            if not path.is_file():
-                continue
-            relative = path.relative_to(bundle).as_posix()
-            target = f"{remote}/{relative}"
-            raw = base64.b64encode(path.read_bytes()).decode("ascii")
+        archive = Path("/tmp") / f"uda-bundle-{task.replace('/', '_')}-{os.getpid()}.tar.gz"
+        with tarfile.open(archive, "w:gz") as tar:
+            for path in sorted(bundle.rglob("*")):
+                tar.add(path, arcname=path.relative_to(bundle).as_posix())
+        archive_bytes = archive.read_bytes()
+        remote_archive = "/tmp/uda-bundle.tar.gz"
+        chunk_size = 48 * 1024
+        for offset in range(0, len(archive_bytes), chunk_size):
+            chunk = base64.b64encode(archive_bytes[offset : offset + chunk_size]).decode("ascii")
             result = _request(
                 self.compat_url,
                 "/v1/file/write",
                 method="POST",
-                payload={"file": target, "content": raw, "encoding": "base64"},
+                payload={
+                    "file": remote_archive,
+                    "content": chunk,
+                    "encoding": "base64",
+                    "append": offset > 0,
+                },
             )
             if isinstance(result, dict) and result.get("success") is False:
-                raise RuntimeError(f"remote bundle upload failed: {relative}")
+                raise RuntimeError(f"remote archive chunk upload failed at {offset}")
+        command = (
+            f"mkdir -p {shlex.quote(remote)}; "
+            f"tar -xzf {shlex.quote(remote_archive)} -C {shlex.quote(remote)}; "
+            f"chmod +x {shlex.quote(remote + '/setup.sh')} {shlex.quote(remote + '/check.sh')}"
+        )
+        result = self._shell(command, timeout=900)
+        archive.unlink(missing_ok=True)
+        if int(result.get("returncode", result.get("exit_code", 1))) != 0:
+            raise RuntimeError(f"remote bundle upload failed: {result}")
         self.deployed.add(task)
         return remote
 
