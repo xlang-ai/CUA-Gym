@@ -181,11 +181,25 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
           trap 'rm -rf "$TMP"' EXIT
           cp -a "$WORKSPACE/.uda_hidden/." "$TMP/hidden/"
           cp "$WORKSPACE/.uda_hidden/asset_lock.json" "$TMP/asset_lock.json"
+          set +e
           python3 "$TMP/hidden/verifier.py" \
             --package "$TMP" \
             --log "$WORKSPACE/.uda_hidden/runtime/move_log.jsonl" \
             --context-dir "$WORKSPACE/context/game" \
-            --pristine-dir "$TMP/hidden/pristine_game"
+            --pristine-dir "$TMP/hidden/pristine_game" >"$TMP/verifier.out" 2>&1
+          verifier_rc=$?
+          set -e
+          cat "$TMP/verifier.out"
+          python3 - "$TMP/verifier.out" "$verifier_rc" <<'PY'
+        import json
+        import sys
+        text = open(sys.argv[1], encoding="utf-8").read()
+        rc = int(sys.argv[2])
+        verdict = "PASS" if rc == 0 and "verdict: PASS" in text else "FAIL"
+        print(json.dumps({"score": 1.0 if verdict == "PASS" else 0.0,
+                          "overall_score": 1.0 if verdict == "PASS" else 0.0,
+                          "verdict": verdict, "verifier_exit_code": rc}))
+        PY
         else
           python3 - <<'PY'
         import json
