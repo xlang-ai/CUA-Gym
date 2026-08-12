@@ -169,6 +169,22 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
         else:
             raise SystemExit("UDA harness did not become ready")
         PY
+          if [[ -d "$WORKSPACE/context/game" ]]; then
+            profile="$WORKSPACE/.uda_hidden/chrome-profile"
+            mkdir -p "$profile"
+            game_url="http://127.0.0.1:${UDA_GAME_PORT:-8317}/"
+            browser=""
+            command -v google-chrome >/dev/null 2>&1 && browser="$(command -v google-chrome)"
+            [[ -z "$browser" ]] && command -v chromium >/dev/null 2>&1 && browser="$(command -v chromium)"
+            [[ -z "$browser" ]] && command -v chromium-browser >/dev/null 2>&1 && browser="$(command -v chromium-browser)"
+            if [[ -n "$browser" ]]; then
+              DISPLAY="${DISPLAY:-:0}" "$browser" --no-sandbox --no-first-run \
+                --no-default-browser-check --disable-session-crashed-bubble \
+                --disable-background-networking --user-data-dir="$profile" \
+                --new-window "$game_url" >/dev/null 2>&1 &
+              echo $! >"$WORKSPACE/.uda_hidden/runtime/browser.pid"
+            fi
+          fi
         fi
     """)
 
