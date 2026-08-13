@@ -243,8 +243,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 result = _request(
                     self.bridge.compat_url,
                     "/v1/file/write",
-                    method="POST",
-                    payload={"file": path, "content": content},
+                method="POST",
+                    payload={
+                        "file": path,
+                        "content": content,
+                        "append": bool(body.get("append", False)),
+                    },
                 )
                 self._send({"ok": bool(result)}); return
             self._send({"error": "not found"}, 404)
