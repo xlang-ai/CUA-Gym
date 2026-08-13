@@ -203,6 +203,20 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
         cp -a "$BUNDLE_ROOT/hidden/." "$WORKSPACE/.uda_hidden/"
         if [[ -f "$WORKSPACE/.uda_hidden/harness_server.py" ]]; then
           mkdir -p "$WORKSPACE/.uda_hidden/runtime"
+          # Workers may be reused across UDA episodes. Stop only the
+          # previous bundle-owned processes before checking readiness; an old
+          # listener must not make a new task look healthy.
+          if [[ -f "$WORKSPACE/.uda_hidden/runtime/harness.pid" ]]; then
+            old_pid="$(cat "$WORKSPACE/.uda_hidden/runtime/harness.pid" 2>/dev/null || true)"
+            [[ "$old_pid" =~ ^[0-9]+$ ]] && kill "$old_pid" 2>/dev/null || true
+          fi
+          if [[ -f "$WORKSPACE/.uda_hidden/runtime/browser.pid" ]]; then
+            old_browser="$(cat "$WORKSPACE/.uda_hidden/runtime/browser.pid" 2>/dev/null || true)"
+            [[ "$old_browser" =~ ^[0-9]+$ ]] && kill "$old_browser" 2>/dev/null || true
+          fi
+          pkill -f "harness_server.py.*--port ${UDA_GAME_PORT:-8317}" 2>/dev/null || true
+          sleep 0.3
+          rm -f "$WORKSPACE/.uda_hidden/runtime/harness.pid" "$WORKSPACE/.uda_hidden/runtime/browser.pid"
           "$PYTHON_BIN" "$WORKSPACE/.uda_hidden/harness_server.py" \
             --contract "$WORKSPACE/.uda_hidden/play_contract.json" \
             --root "$WORKSPACE/context/game" \
@@ -210,7 +224,12 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
             --log "$WORKSPACE/.uda_hidden/runtime/move_log.jsonl" \
             >"$WORKSPACE/.uda_hidden/runtime/harness.log" 2>&1 &
           echo $! >"$WORKSPACE/.uda_hidden/runtime/harness.pid"
-          python3 - "${UDA_GAME_PORT:-8317}" <<'PY'
+          harness_pid="$(cat "$WORKSPACE/.uda_hidden/runtime/harness.pid")"
+          if ! kill -0 "$harness_pid" 2>/dev/null; then
+            tail -40 "$WORKSPACE/.uda_hidden/runtime/harness.log" >&2 || true
+            exit 1
+          fi
+          "$PYTHON_BIN" - "${UDA_GAME_PORT:-8317}" <<'PY'
         import socket
         import sys
         import time
