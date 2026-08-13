@@ -172,6 +172,8 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
                 for path in (item.get("source_files") or [])
             }
         if expected:
+            if context_game.exists():
+                shutil.rmtree(context_game)
             context_game.mkdir(parents=True, exist_ok=True)
             for relative in sorted(expected):
                 canonical = pristine / relative
@@ -199,6 +201,9 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
           PYTHON_BIN="$WORKSPACE/.uda_hidden/venv/bin/python"
         fi
         printf '%s\n' "$PYTHON_BIN" >"$WORKSPACE/.uda_hidden/python_bin"
+        # Remove mutable task state from a previous episode while preserving
+        # the worker's unrelated desktop directories.
+        rm -rf "$WORKSPACE/context/game" "$WORKSPACE/.uda_hidden/runtime"
         cp -a "$BUNDLE_ROOT/exec/." "$WORKSPACE/"
         cp -a "$BUNDLE_ROOT/hidden/." "$WORKSPACE/.uda_hidden/"
         if [[ -f "$WORKSPACE/.uda_hidden/harness_server.py" ]]; then
