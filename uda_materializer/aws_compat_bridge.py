@@ -239,17 +239,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send({"content_b64": base64.b64encode(content.encode()).decode()}); return
             if self.path == "/tool/file/write":
                 path = body.get("path") or body.get("file")
-                content = base64.b64decode(body.get("content_b64", "")).decode()
-                result = _request(
-                    self.bridge.compat_url,
-                    "/v1/file/write",
-                method="POST",
-                    payload={
-                        "file": path,
-                        "content": content,
-                        "append": bool(body.get("append", False)),
-                    },
-                )
+                raw = base64.b64decode(body.get("content_b64", ""), validate=True)
+                # The EC2 compatibility endpoint accepts small text writes,
+                # but long Kimi memory snapshots can exceed its single-call
+                # body limit. Preserve byte-exact UTF-8 content while using
+                # the same append protocol as bundle deployment.
+                chunk_size = 32 * 1024
+                chunks = [raw[i:i + chunk_size] for i in range(0, len(raw), chunk_size)] or [b""]
+                for index, chunk in enumerate(chunks):
+                    result = _request(
+                        self.bridge.compat_url,
+                        "/v1/file/write",
+                        method="POST",
+                        payload={
+                            "file": path,
+                            "content": chunk.decode("utf-8"),
+                            "append": bool(body.get("append", False)) or index > 0,
+                        },
+                    )
+                    if isinstance(result, dict) and result.get("success") is False:
+                        raise RuntimeError(f"AWS file write failed at chunk {index}")
                 self._send({"ok": bool(result)}); return
             self._send({"error": "not found"}, 404)
         except Exception as exc:
