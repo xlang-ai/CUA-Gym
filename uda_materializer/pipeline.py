@@ -214,7 +214,6 @@ def scaffold_native_bundle(package: Path, workspace: Path, payload: dict[str, An
             old_browser="$(cat "$WORKSPACE/.uda_hidden/runtime/browser.pid" 2>/dev/null || true)"
             [[ "$old_browser" =~ ^[0-9]+$ ]] && kill "$old_browser" 2>/dev/null || true
           fi
-          pkill -f "harness_server.py.*--port ${UDA_GAME_PORT:-8317}" 2>/dev/null || true
           sleep 0.3
           rm -f "$WORKSPACE/.uda_hidden/runtime/harness.pid" "$WORKSPACE/.uda_hidden/runtime/browser.pid"
           "$PYTHON_BIN" "$WORKSPACE/.uda_hidden/harness_server.py" \
